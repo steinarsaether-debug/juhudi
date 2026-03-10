@@ -1,0 +1,1449 @@
+// Juhudi Kilimo – Microfinance Customer Onboarding & Loan Management
+// Kenya Data Protection Act 2019 / CBK AML-CFT Regulations compliant schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enumerations ─────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN           // System administrator
+  BRANCH_MANAGER  // Oversees a branch; can approve large loans
+  SUPERVISOR      // Reviews flagged applications
+  LOAN_OFFICER    // Field staff; onboards customers
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
+enum KYCStatus {
+  PENDING         // Documents not yet submitted
+  SUBMITTED       // Documents uploaded, awaiting review
+  VERIFIED        // KYC passed
+  REJECTED        // Failed KYC verification
+  REQUIRES_UPDATE // Additional information needed
+}
+
+enum AMLStatus {
+  PENDING
+  CLEAR           // No AML flags
+  FLAGGED         // Requires enhanced due diligence (EDD)
+  BLOCKED         // Blocked – suspicious activity
+}
+
+enum LandOwnership {
+  OWNED
+  LEASED
+  COMMUNAL
+  FAMILY
+}
+
+enum IrrigationType {
+  IRRIGATED
+  RAIN_FED
+  MIXED
+}
+
+enum MarketAccess {
+  CONTRACT        // Formal contract farming / offtaker
+  COOPERATIVE     // Through cooperative
+  LOCAL_MARKET    // Open market / broker
+  SUBSISTENCE     // Primarily for own consumption
+}
+
+enum CRBStatus {
+  CLEAR
+  LISTED          // Has negative CRB listing
+  UNKNOWN         // Not yet checked
+  PERFORMING      // Has loans, performing well
+}
+
+enum DocumentType {
+  NATIONAL_ID_FRONT
+  NATIONAL_ID_BACK
+  KRA_PIN
+  PASSPORT_PHOTO
+  PROOF_OF_RESIDENCE
+  FARM_OWNERSHIP_PROOF
+  GROUP_MEMBERSHIP_CERT
+  BANK_STATEMENT
+  MPESA_STATEMENT
+  OTHER
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  CONDITIONALLY_APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum LoanStatus {
+  PENDING_DISBURSEMENT
+  ACTIVE
+  COMPLETED
+  DEFAULTED
+  WRITTEN_OFF
+}
+
+enum DisbursementMethod {
+  MPESA
+  BANK_TRANSFER
+  CASH
+}
+
+enum PaymentMethod {
+  MPESA
+  BANK_TRANSFER
+  CASH
+  CHEQUE
+}
+
+enum LoanRecommendation {
+  APPROVE
+  CONDITIONAL
+  DECLINE
+  STRONG_DECLINE
+}
+
+// ─── Loan Groups & Collateral ─────────────────────────────────────────────────
+
+enum LoanProductCategory {
+  SHORT_TERM_INPUTS       // ≤ 6 months: fertilizer, seeds, pesticides, agrochemicals
+  LONG_TERM_INVESTMENT    // 12 months: livestock, replanting, irrigation, equipment
+}
+
+enum LoanType {
+  INDIVIDUAL
+  GROUP
+}
+
+// ─── Individual Loan Product ───────────────────────────────────────────────────
+
+enum ILPSegment {
+  FARMER      // Graduating large-scale farmer
+  LANDLORD    // Urban/peri-urban rental property owner
+  SHOP_OWNER  // Retail business owner
+}
+
+enum ILPEligibilityStatus {
+  NOT_ELIGIBLE  // Branch has not unlocked this segment
+  ELIGIBLE      // Branch is actively offering this segment
+  MASTERED      // Branch has demonstrated sustained performance; can unlock 2nd segment
+}
+
+enum LoanGroupStatus {
+  FORMING     // Being set up; not yet active
+  ACTIVE      // Actively borrowing / meeting
+  SUSPENDED   // Temporarily suspended (arrears / compliance)
+  DISSOLVED   // Group closed
+}
+
+enum GroupMeetingFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum GroupMemberRole {
+  CHAIR
+  SECRETARY
+  TREASURER
+  MEMBER
+}
+
+enum CollateralType {
+  TITLE_DEED
+  MOTOR_VEHICLE
+  CHATTEL           // Movable property (machinery, tools, etc.)
+  LIVESTOCK
+  CROP_LIEN         // Charge over standing / harvested crops
+  SALARY_ASSIGNMENT
+  GROUP_GUARANTEE   // Joint liability / solidarity group
+  PERSONAL_GUARANTEE
+  SAVINGS_DEPOSIT
+  OTHER
+}
+
+// ─── Branch Credit Committee ──────────────────────────────────────────────────
+
+enum BccStatus {
+  OPEN        // Active discussion – voting in progress
+  DECIDED     // Consensus reached (majority or unanimous)
+  OVERRIDDEN  // Branch Manager pushed through against majority
+  EXPIRED     // No decision within 48h – escalated
+}
+
+enum BccOutcome {
+  APPROVED    // BCC approves the application
+  REFUSED     // BCC refuses the application
+  REFERRED    // Referred to higher committee / head office
+  CONDITIONAL // Approved with conditions attached
+}
+
+enum VoteType {
+  ENDORSE   // In favour – approve the loan
+  REFUSE    // Against – decline the loan
+  ABSTAIN   // Present but not voting (records attendance)
+}
+
+enum BccMeetingStatus {
+  SCHEDULED  // Planned but not yet started
+  ACTIVE     // In progress – applications being presented
+  COMPLETED  // All sessions decided; meeting closed
+}
+
+enum BccFlagCategory {
+  REPAYMENT_CAPACITY   // Income, DSR, existing debt concerns
+  PURPOSE_RISK         // Use-of-funds or loan purpose concerns
+  CHARACTER_CONCERN    // Behaviour, references, CRB concerns
+  SECTOR_RISK          // Crop failure risk, market volatility
+  COLLATERAL_WEAKNESS  // Collateral value, documentation gaps
+  DATA_QUALITY         // Inconsistencies, copy-paste, implausible data
+  OTHER                // General concern not covered above
+}
+
+enum NotificationType {
+  BCC_MEETING_SCHEDULED   // Meeting has been created
+  BCC_MEETING_STARTED     // BM activated the meeting
+  BCC_SESSION_PRESENTING  // LO is now presenting this case
+  BCC_VOTE_CAST           // A member has voted
+  BCC_FLAG_RAISED         // A concern flag was raised
+  BCC_DECISION_MADE       // Session was decided
+  BCC_CONDITION_DUE       // A loan with pending flag outcomes needs review
+}
+
+// ─── Customer Award / Loyalty Tiers ───────────────────────────────────────────
+
+enum CustomerTier {
+  STANDARD    // 0–1 completed cycles
+  BRONZE      // ≥2 cycles, ≤30d arrears → −0.5% rate / −10% fee
+  SILVER      // ≥3 cycles, ≤14d arrears → −1.0% rate / −20% fee
+  GOLD        // ≥5 cycles, ≤7d arrears  → −1.5% rate / −30% fee
+  PLATINUM    // ≥7 cycles, 0d arrears   → −2.0% rate / −40% fee
+}
+
+// ─── ILP KPI Risk Flags ───────────────────────────────────────────────────────
+
+enum RiskFlagCategory {
+  FINANCIAL_CAPACITY      // DSR, savings, income stability
+  BUSINESS_PERFORMANCE    // market access, operations, business quality score
+  REPAYMENT_BEHAVIOR      // arrears, missed payments
+  OPERATIONAL_RISK        // insurance, irrigation, location risk
+  COLLATERAL_RISK         // collateral coverage, documentation gaps
+}
+
+enum RiskFlagSeverity {
+  YELLOW   // Warning — monitor, increase follow-up frequency
+  RED      // Critical — immediate LO action required
+}
+
+// ─── Collections ──────────────────────────────────────────────────────────────
+
+enum CollectionActionType {
+  AUTO_ALERT        // System-generated day-1 alert
+  PHONE_CALL        // Called customer
+  SMS_SENT          // SMS reminder sent
+  FIELD_VISIT       // Visited customer at farm/home
+  PROMISE_TO_PAY    // Customer committed to pay by specific date
+  PARTIAL_PAYMENT   // Partial payment received
+  DEMAND_LETTER     // Formal demand letter issued
+  LEGAL_NOTICE      // Legal proceedings initiated
+  WRITE_OFF_RECOMMENDED // Portfolio officer recommends write-off
+  RESTRUCTURED      // Loan terms renegotiated
+  OTHER             // Other action – see notes
+}
+
+// ─── Core User Model ──────────────────────────────────────────────────────────
+
+model User {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  passwordHash   String
+  role           UserRole  @default(LOAN_OFFICER)
+  firstName      String
+  lastName       String
+  phone          String
+  employeeId     String?   @unique
+  branchId       String?
+  branch         Branch?   @relation(fields: [branchId], references: [id])
+  isActive       Boolean   @default(true)
+  lastLogin      DateTime?
+  mustChangePass Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  loanApplications      LoanApplication[]
+  auditLogs             AuditLog[]
+  verifiedDocuments     KYCDocument[]
+  bccVotes              BccVote[]
+  bccComments           BccComment[]
+  collectionActions     CollectionAction[]
+  resolvedQualityFlags  DataQualityFlag[]   @relation("ResolvedQualityFlags")
+  interviewsConducted   CustomerInterview[] @relation("InterviewsConducted")
+  locationPings         LocationPing[]
+  managedGroups         LoanGroup[]         @relation("ManagedGroups")
+  mpesaStatements       MpesaStatement[]    @relation("MpesaUploads")
+  systemConfigChanges   SystemConfig[]      @relation("ConfigUpdates")
+  completedFollowUps    ILPFollowUp[]       @relation("CompletedFollowUps")
+  resolvedRiskFlags     CustomerRiskFlag[]  @relation("ResolvedRiskFlags")
+  bccMeetingsCreated    BccMeeting[]        @relation("BccMeetingsCreated")
+  bccFlagsRaised        BccFlag[]           @relation("BccFlagsRaised")
+  bccFlagsResolved      BccFlag[]           @relation("BccFlagsResolved")
+  bccConditionsAdded    BccCondition[]      @relation("BccConditionsAdded")
+  bccConditionsVerified BccCondition[]      @relation("BccConditionsVerified")
+  notifications         Notification[]
+
+  @@map("users")
+}
+
+model Branch {
+  id        String  @id @default(uuid())
+  name      String
+  code      String  @unique
+  county    String
+  address   String
+  latitude  Float?
+  longitude Float?
+  isActive  Boolean @default(true)
+
+  users             User[]
+  customers         Customer[]
+  bccSessions       BccSession[]
+  bccMeetings       BccMeeting[]
+  loanGroups        LoanGroup[]
+  ilpEligibilities  BranchILPEligibility[]
+
+  @@map("branches")
+}
+
+// ─── Customer / Borrower ──────────────────────────────────────────────────────
+
+model Customer {
+  id                String        @id @default(uuid())
+
+  // Yara relationship
+  yaraCustomerId    String?       @unique
+  yaraRegion        String?
+
+  // PII – stored AES-256-GCM encrypted
+  nationalIdEnc     String        // Encrypted National ID number
+  nationalIdHash    String        @unique // SHA-256 hash for deduplication lookups
+  phoneEnc          String        // Encrypted primary phone
+  phoneHash         String        @unique
+  alternatePhone    String?
+
+  // Non-sensitive personal data
+  firstName         String
+  lastName          String
+  dateOfBirth       DateTime
+  gender            Gender
+  maritalStatus     MaritalStatus
+  numberOfDependents Int          @default(0)
+
+  // Location
+  county            String
+  subCounty         String
+  ward              String?
+  village           String
+  physicalAddress   String?
+  gpsLatitude       Float?
+  gpsLongitude      Float?
+
+  // Next of kin (mandatory per CBK KYC)
+  nextOfKinName     String
+  nextOfKinPhone    String
+  nextOfKinRelation String
+  nextOfKinNationalId String?
+
+  // KDPA consent
+  dataConsentGiven  Boolean       @default(false)
+  dataConsentAt     DateTime?
+  dataConsentVersion String?
+
+  // Compliance
+  isPEP             Boolean       @default(false)  // Politically Exposed Person
+  pepDetails        String?
+  kycStatus         KYCStatus     @default(PENDING)
+  amlStatus         AMLStatus     @default(PENDING)
+  amlNotes          String?
+  riskRating        String?       @default("LOW")  // LOW/MEDIUM/HIGH
+
+  // Branch
+  branchId          String
+  branch            Branch        @relation(fields: [branchId], references: [id])
+
+  isActive          Boolean       @default(true)
+  customerNumber    String?       @unique
+
+  // Loyalty / award tier (updated on each loan completion)
+  currentTier       CustomerTier  @default(STANDARD)
+  tierUpdatedAt     DateTime?
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  farmProfile           FarmProfile?
+  financialProfile      FinancialProfile?
+  kycDocuments          KYCDocument[]
+  creditScores          CreditScore[]
+  loanApplications      LoanApplication[]
+  loans                 Loan[]
+  auditLogs             CustomerAuditLog[]
+  interviews            CustomerInterview[]
+  loanGroupMemberships  LoanGroupMember[]
+  mpesaStatements       MpesaStatement[]
+  riskFlags             CustomerRiskFlag[]
+
+  @@map("customers")
+}
+
+// ─── Farm Profile ─────────────────────────────────────────────────────────────
+
+model FarmProfile {
+  id               String        @id @default(uuid())
+  customerId       String        @unique
+  customer         Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  farmSize         Float         // acres
+  landOwnership    LandOwnership
+  primaryCrop      String
+  secondaryCrops   String[]
+  irrigationType   IrrigationType
+  hasGreenhouse    Boolean       @default(false)
+  livestockType    String[]
+  livestockCount   Int?
+
+  // Market
+  marketAccess     MarketAccess
+  distanceToMarket Float?        // km
+  hasStorageFacility Boolean     @default(false)
+
+  // Yara inputs
+  yaraMemberSince  DateTime?
+  yaraProductsUsed String[]
+  annualInputCostKes Float?
+  averageYieldKg   Float?
+
+  // Infrastructure
+  hasElectricity   Boolean       @default(false)
+  hasPipedWater    Boolean       @default(false)
+
+  updatedAt        DateTime      @updatedAt
+
+  @@map("farm_profiles")
+}
+
+// ─── Financial Profile ────────────────────────────────────────────────────────
+
+model FinancialProfile {
+  id                        String    @id @default(uuid())
+  customerId                String    @unique
+  customer                  Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  // Income (monthly KES)
+  monthlyFarmIncome         Float
+  monthlyOffFarmIncome      Float     @default(0)
+  monthlyHouseholdExpenses  Float
+  otherMonthlyDebt          Float     @default(0)
+
+  // Mobile money
+  hasMpesa                  Boolean   @default(true)
+  mpesaMonthlyAvgKes        Float?
+  mpesaPhoneEnc             String?   // Encrypted (may differ from primary phone)
+
+  // Bank account
+  hasBankAccount            Boolean   @default(false)
+  bankName                  String?
+  bankBranchEnc             String?
+
+  // Savings / Groups
+  hasGroupMembership        Boolean   @default(false)
+  groupName                 String?
+  groupType                 String?   // chama/SACCO/cooperative
+  groupMonthlySavingsKes    Float?
+
+  // CRB
+  crbCheckedAt              DateTime?
+  crbStatus                 CRBStatus @default(UNKNOWN)
+  crbReportEnc              String?   // Encrypted CRB report JSON
+  previousLoansCount        Int       @default(0)
+  previousLoansRepaidOnTime Boolean?
+
+  updatedAt                 DateTime  @updatedAt
+
+  @@map("financial_profiles")
+}
+
+// ─── KYC Documents ────────────────────────────────────────────────────────────
+
+model KYCDocument {
+  id           String       @id @default(uuid())
+  customerId   String
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type         DocumentType
+  filePathEnc  String       // Encrypted file storage path
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  checksum     String       // SHA-256 of original file
+  isVerified   Boolean      @default(false)
+  verifiedById String?
+  verifiedBy   User?        @relation(fields: [verifiedById], references: [id])
+  verifiedAt   DateTime?
+  rejectedReason String?
+  uploadedAt   DateTime     @default(now())
+
+  @@map("kyc_documents")
+}
+
+// ─── Credit Scoring ───────────────────────────────────────────────────────────
+
+model CreditScore {
+  id                String             @id @default(uuid())
+  customerId        String
+  customer          Customer           @relation(fields: [customerId], references: [id])
+
+  // Component scores
+  cashflowScore     Int                // 0-35
+  cashflowBreakdown Json               // detailed sub-scores
+  abilityScore      Int                // 0-35
+  abilityBreakdown  Json
+  willingnessScore  Int                // 0-30
+  willingnessBreakdown Json
+
+  totalScore        Int                // 0-100
+  recommendation    LoanRecommendation
+  maxLoanAmountKes  Float
+  suggestedTermMonths Int
+  scoringNotes      String?
+
+  // Snapshot of inputs at scoring time (for auditability)
+  inputSnapshot     Json
+
+  scoredByUserId    String
+  createdAt         DateTime           @default(now())
+
+  loanApplications  LoanApplication[]
+
+  @@map("credit_scores")
+}
+
+// ─── Loan Application ─────────────────────────────────────────────────────────
+
+model LoanApplication {
+  id               String            @id @default(uuid())
+  applicationNumber String           @unique @default(cuid())
+  customerId       String
+  customer         Customer          @relation(fields: [customerId], references: [id])
+  officerId        String
+  officer          User              @relation(fields: [officerId], references: [id])
+  creditScoreId    String?
+  creditScore      CreditScore?      @relation(fields: [creditScoreId], references: [id])
+
+  // Loan type & group
+  loanType         LoanType          @default(INDIVIDUAL)
+  loanGroupId      String?
+  loanGroup        LoanGroup?        @relation(fields: [loanGroupId], references: [id])
+  groupLoanShareKes Float?           // This member's share of the group loan
+
+  // Request details
+  requestedAmountKes Float
+  purposeCategory  String?           // "FERTILIZER_AGROCHEMICALS" | "SEEDS" | etc.
+  purposeOfLoan    String
+  loanProductId    String?
+  loanProduct      LoanProduct?      @relation(fields: [loanProductId], references: [id])
+  termMonths       Int
+  repaymentMethod  DisbursementMethod?
+
+  // Cash flow snapshot at application time (LO may update from financial profile)
+  monthlyIncomeSnapshot    Float?
+  monthlyExpensesSnapshot  Float?
+
+  // Resilience assessment
+  hadShockPastYear         Boolean?
+  shockType                String?   // "DROUGHT" | "ILLNESS" | "LIVESTOCK_LOSS" | etc.
+  copingMechanism          String?
+  hasSavingsBuffer         Boolean?
+  savingsBufferMonths      Int?
+  hasAlternativeIncome     Boolean?
+
+  // Decision
+  status           ApplicationStatus @default(DRAFT)
+  approvedAmountKes Float?
+  interestRatePct  Float?
+  reviewNotes      String?
+  rejectionReason  String?
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+
+  // ILP (null for group loans and standard individual loans)
+  ilpSegment       ILPSegment?
+
+  // Loyalty pricing snapshot (applied at application time)
+  customerTierAtApplication  CustomerTier?
+  interestRateDiscountPct    Float?          // e.g. 0.5 for 0.5% p.a. reduction
+  processingFeeDiscountPct   Float?          // e.g. 10 for 10% reduction
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  loan             Loan?
+  bccSession       BccSession?
+  collateral       LoanCollateral[]
+  ilpAssessment    ILPAssessment?
+
+  @@map("loan_applications")
+}
+
+// ─── Loan Products ────────────────────────────────────────────────────────────
+
+model LoanProduct {
+  id                  String               @id @default(uuid())
+  name                String
+  code                String               @unique
+  description         String?
+  category            LoanProductCategory?
+  minAmountKes        Float
+  maxAmountKes        Float
+  minTermMonths       Int
+  maxTermMonths       Int
+  nominalInterestRate Float                // annual %
+  processingFeePct    Float                @default(0)
+  isActive            Boolean              @default(true)
+
+  loanApplications LoanApplication[]
+
+  @@map("loan_products")
+}
+
+// ─── Disbursed Loan ───────────────────────────────────────────────────────────
+
+model Loan {
+  id                  String             @id @default(uuid())
+  loanNumber          String             @unique @default(cuid())
+  applicationId       String             @unique
+  application         LoanApplication    @relation(fields: [applicationId], references: [id])
+  customerId          String
+  customer            Customer           @relation(fields: [customerId], references: [id])
+
+  principalKes        Float
+  interestRatePct     Float
+  termMonths          Int
+  installmentKes      Float
+  totalRepayableKes   Float
+  disbursementMethod    DisbursementMethod
+  disbursementReference String?
+  disbursedAt           DateTime?
+  maturityDate          DateTime?
+
+  status              LoanStatus         @default(PENDING_DISBURSEMENT)
+  daysInArrears       Int                @default(0)
+  outstandingBalKes   Float?
+
+  // ILP cycle tracking (null for non-ILP loans)
+  ilpCycleNumber      Int?               // 1 = first ILP loan for this customer, 2 = second
+
+  repayments          Repayment[]
+  collectionActions   CollectionAction[]
+  ilpFollowUps        ILPFollowUp[]
+  riskFlags           CustomerRiskFlag[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@map("loans")
+}
+
+model Repayment {
+  id           String        @id @default(uuid())
+  loanId       String
+  loan         Loan          @relation(fields: [loanId], references: [id])
+  amountKes    Float
+  paymentDate  DateTime
+  method       PaymentMethod
+  reference    String?       // M-Pesa code / bank ref
+  recordedById String
+  notes        String?
+  createdAt    DateTime      @default(now())
+
+  @@map("repayments")
+}
+
+// ─── Audit / Compliance Logs ─────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  action      String   // e.g. "CREATE_CUSTOMER", "VIEW_KYC_DOCS", "APPROVE_LOAN"
+  entity      String   // table name
+  entityId    String
+  changes     Json?    // before/after diff (PII fields masked)
+  ipAddress   String
+  userAgent   String
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model CustomerAuditLog {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  action     String
+  performedBy String
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([customerId])
+  @@map("customer_audit_logs")
+}
+
+// ─── Benchmark / Market Intelligence ─────────────────────────────────────────
+// Used by loan officers to verify customer-stated income & expenses against
+// independently sourced regional benchmarks (KNBS, KTDA, Ministry of Agri, etc.)
+
+enum BenchmarkCategory {
+  FOOD_NUTRITION        // Food basket, staples prices
+  ACCOMMODATION         // Rent by region
+  TRANSPORT             // Matatu fares, boda-boda, fuel
+  EDUCATION             // School fees and levies
+  HEALTHCARE_UTILITIES  // Clinic fees, electricity, water
+  CLOTHING_PERSONAL     // Clothing, toiletries
+  CROP_INCOME           // Tea, maize, coffee, horticulture income per acre
+  LIVESTOCK_INCOME      // Dairy, beef, goats, poultry income
+  LABOUR_WAGES          // Casual & permanent labour rates
+  AGRICULTURAL_INPUTS   // Fertiliser, seed, chemical costs per acre
+}
+
+enum BenchmarkScope {
+  NATIONAL  // Applies across Kenya
+  REGION    // e.g., "RIFT VALLEY", "CENTRAL HIGHLANDS"
+  COUNTY    // Specific Kenya county
+}
+
+enum BenchmarkItemType {
+  MONTHLY_EXPENSE    // Recurring monthly household cost
+  ANNUAL_EXPENSE     // Annual one-off cost (e.g., school fees)
+  INCOME_PER_UNIT    // Income per productive unit (per acre, per animal/month)
+  MONTHLY_INCOME     // Monthly income estimate
+  PRICE_PER_UNIT     // Market price per physical unit (kg, litre, bag)
+  WAGE_RATE          // Labour wage (daily or monthly)
+}
+
+model DataSource {
+  id              String   @id @default(uuid())
+  name            String   // "Kenya National Bureau of Statistics"
+  shortName       String   @unique // "KNBS"
+  url             String   // https://www.knbs.or.ke
+  description     String?
+  dataTypes       String[] // categories this source covers
+  updateFrequency String?  // "MONTHLY", "QUARTERLY", "ANNUAL"
+  lastCheckedAt   DateTime?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  benchmarkValues BenchmarkValue[]
+
+  @@map("data_sources")
+}
+
+model BenchmarkItem {
+  id          String            @id @default(uuid())
+  category    BenchmarkCategory
+  name        String
+  description String?
+  unit        String            // "KES/month", "KES/acre/year", "KES/kg", "KES/litre"
+  itemType    BenchmarkItemType
+  sortOrder   Int               @default(0)
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  values      BenchmarkValue[]
+
+  @@unique([category, name])
+  @@map("benchmark_items")
+}
+
+model BenchmarkValue {
+  id            String         @id @default(uuid())
+  itemId        String
+  item          BenchmarkItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  sourceId      String
+  source        DataSource     @relation(fields: [sourceId], references: [id])
+
+  // Geographic scope
+  scope         BenchmarkScope @default(NATIONAL)
+  county        String?        // Kenya county name (for COUNTY scope)
+  region        String?        // "CENTRAL HIGHLANDS", "RIFT VALLEY", "WESTERN", "COAST", "NYANZA", "EASTERN", "NORTH EASTERN"
+
+  // Three-point estimate
+  valueLow      Float          // Minimum / pessimistic
+  valueMid      Float          // Median / most likely
+  valueHigh     Float          // Maximum / optimistic
+
+  // Temporal metadata
+  referenceYear Int            // Year this data was collected/applies to
+  validFrom     DateTime
+  validTo       DateTime?      // null = still current
+
+  // Context
+  notes         String?        // e.g., "KTDA payment rates, East of Rift, January 2024"
+  assumptions   String?        // e.g., "Grade cow, zero-grazing, cooperative market"
+
+  isActive      Boolean        @default(true)
+  createdById   String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([itemId, scope, county])
+  @@index([referenceYear])
+  @@map("benchmark_values")
+}
+
+// ─── Branch Credit Committee ──────────────────────────────────────────────────
+
+model BccMeeting {
+  id           String           @id @default(uuid())
+  branchId     String
+  branch       Branch           @relation(fields: [branchId], references: [id])
+  title        String?          // Optional label e.g. "Monday Credit – Week 11"
+  scheduledAt  DateTime?        // When the meeting is planned
+  status       BccMeetingStatus @default(SCHEDULED)
+  closedAt     DateTime?
+  createdById  String
+  createdBy    User             @relation("BccMeetingsCreated", fields: [createdById], references: [id])
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  sessions     BccSession[]
+
+  @@index([branchId, status])
+  @@map("bcc_meetings")
+}
+
+model BccSession {
+  id                  String           @id @default(uuid())
+  loanApplicationId   String           @unique
+  loanApplication     LoanApplication  @relation(fields: [loanApplicationId], references: [id])
+  branchId            String
+  branch              Branch           @relation(fields: [branchId], references: [id])
+
+  // Meeting parent (optional – sessions can exist without a meeting)
+  meetingId           String?
+  meeting             BccMeeting?      @relation(fields: [meetingId], references: [id])
+  agendaIndex         Int?             // Ordering within meeting
+
+  // LO case presentation
+  loRecommendation    String?          // RECOMMEND_APPROVE | RECOMMEND_CONDITIONAL | RECOMMEND_DECLINE
+  loNarrative         String?          @db.Text // LO structured case narrative
+  presentedAt         DateTime?        // When LO started presenting
+
+  status              BccStatus        @default(OPEN)
+  outcome             BccOutcome?      // Set when status moves to DECIDED or OVERRIDDEN
+  outcomeNotes        String?          // Conditions, referral reason, etc.
+
+  // Branch Manager override
+  managerOverride     Boolean          @default(false)
+  overrideReason      String?
+  overriddenById      String?          // User who overrode
+
+  // Quorum – minimum votes required before decision (set at session open)
+  quorumRequired      Int              @default(2)
+
+  openedAt            DateTime         @default(now())
+  closedAt            DateTime?
+  expiresAt           DateTime?        // 48h from openedAt
+
+  createdByUserId     String
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  votes               BccVote[]
+  comments            BccComment[]
+  flags               BccFlag[]
+  conditions          BccCondition[]
+
+  @@index([branchId, status])
+  @@index([loanApplicationId])
+  @@index([meetingId])
+  @@map("bcc_sessions")
+}
+
+model BccVote {
+  id          String     @id @default(uuid())
+  sessionId   String
+  session     BccSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+
+  vote        VoteType
+  rationale   String?    // Reason for the vote (optional, recommended for REFUSE)
+
+  votedAt     DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([sessionId, userId])  // One vote per person per session
+  @@map("bcc_votes")
+}
+
+model BccComment {
+  id          String     @id @default(uuid())
+  sessionId   String
+  session     BccSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+
+  body        String     @db.Text
+  editedAt    DateTime?
+
+  createdAt   DateTime   @default(now())
+
+  @@index([sessionId, createdAt])
+  @@map("bcc_comments")
+}
+
+// ─── Data Quality ─────────────────────────────────────────────────────────────
+// Automatic checks for duplicates, copy-paste behaviour, and implausible data.
+
+enum QualityFlagType {
+  SIMILAR_NAME_SAME_BRANCH      // Jaro-Winkler > 0.88, same branch
+  SIMILAR_NAME_CROSS_BRANCH     // Jaro-Winkler > 0.88, different branch
+  NAME_DOB_MATCH                // Similar name AND DOB within ±1 year
+  GPS_PROXIMITY                 // GPS within 15 m of existing customer
+  FINANCIAL_PROFILE_COPY        // Identical income/expense to another of LO's customers
+  LOAN_PURPOSE_COPY_PASTE       // Loan purpose ≥ 65% Jaccard similarity to LO's recent app
+  ROUND_NUMBER_INCOME           // Farm / off-farm income is a suspiciously round figure
+  NEGATIVE_DISPOSABLE_INCOME    // Stated expenses exceed stated income
+  HIGH_DEBT_BURDEN              // Debt service exceeds 50% of net income
+  RAPID_SUCCESSION              // Same LO submitted > 3 applications within 60 minutes
+  GENERIC_LOAN_PURPOSE          // Purpose < 15 words or matches known template phrases
+}
+
+enum FlagSeverity {
+  INFO      // Informational – no action required
+  WARNING   // Needs human review before proceeding
+  CRITICAL  // Must be resolved before loan can progress
+}
+
+model DataQualityFlag {
+  id            String          @id @default(uuid())
+  entityType    String          // 'CUSTOMER' | 'LOAN_APPLICATION'
+  entityId      String
+  flagType      QualityFlagType
+  severity      FlagSeverity
+  message       String
+  details       Json?           // e.g. { matchedId, similarity, threshold }
+  isResolved    Boolean         @default(false)
+  resolvedById  String?
+  resolvedAt    DateTime?
+  resolvedNote  String?
+  createdAt     DateTime        @default(now())
+
+  resolvedBy    User?           @relation("ResolvedQualityFlags", fields: [resolvedById], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([isResolved, severity])
+  @@index([flagType])
+  @@map("data_quality_flags")
+}
+
+// ─── Customer Pre-Screening Interview ────────────────────────────────────────
+// Structured interview conducted by the LO before or alongside onboarding.
+// 8 sections, 28 questions; weighted scoring 1-5 per question.
+// Supports bilingual (en/sw) delivery; answers may include transcribed speech.
+
+enum InterviewStatus {
+  DRAFT       // In progress / not yet submitted
+  COMPLETED   // Submitted and scored
+}
+
+enum InterviewRecommendation {
+  APPROVE                   // ≥ 85 % of max score
+  APPROVE_WITH_CONDITIONS   // 70–84 %
+  FURTHER_EVALUATION        // 50–69 %
+  DECLINE                   // < 50 %
+}
+
+model CustomerInterview {
+  id              String                   @id @default(uuid())
+  customerId      String
+  customer        Customer                 @relation(fields: [customerId], references: [id])
+  conductedById   String
+  conductedBy     User                     @relation("InterviewsConducted", fields: [conductedById], references: [id])
+
+  language        String                   @default("en")  // "en" | "sw"
+  status          InterviewStatus          @default(DRAFT)
+
+  // Interview type: STANDARD (pre-screening) or ILP vertical-specific
+  interviewType   String                   @default("STANDARD")
+  // values: STANDARD | ILP_FARMER | ILP_LANDLORD | ILP_SHOP_OWNER
+  ilpSegment      ILPSegment?              // set when interviewType is ILP_*
+
+  // Answers stored as { "q1": { "score": 4, "notes": "..." }, "q2": { ... }, ... }
+  answers         Json                     @default("{}")
+
+  // Derived scoring
+  totalScore      Float?
+  maxScore        Float?
+  scorePercent    Float?
+  recommendation  InterviewRecommendation?
+
+  // LO's immediate impressions / qualitative notes
+  loNotes         String?                  @db.Text
+
+  completedAt     DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@index([customerId])
+  @@index([conductedById])
+  @@index([interviewType, ilpSegment])
+  @@map("customer_interviews")
+}
+
+// ─── M-Pesa Statement Analysis ───────────────────────────────────────────────
+// LO uploads 2-3 months of customer M-Pesa statements (PDF or CSV from Safaricom).
+// AI extracts and analyses transactions to detect hidden loans, gambling,
+// second-household support, and other financial risk patterns.
+
+enum MpesaAnalysisStatus {
+  PENDING     // Uploaded; not yet processed
+  PROCESSING  // AI analysis in progress
+  COMPLETE    // Analysis done successfully
+  FAILED      // Parsing or AI call failed
+}
+
+model MpesaStatement {
+  id            String              @id @default(uuid())
+  customerId    String
+  customer      Customer            @relation(fields: [customerId], references: [id])
+  uploadedById  String
+  uploadedBy    User                @relation("MpesaUploads", fields: [uploadedById], references: [id])
+
+  fileName      String
+  mimeType      String              // application/pdf | text/csv
+  sizeBytes     Int
+  checksum      String              // SHA-256 – prevents duplicate uploads
+  filePathEnc   String              // AES-256-GCM encrypted storage path
+
+  // Statement metadata extracted from content
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  transactionCount Int              @default(0)
+
+  // Analysis state
+  analysisStatus   MpesaAnalysisStatus @default(PENDING)
+  analysisError    String?
+  analysedAt       DateTime?
+
+  // ── AI findings (nullable – populated once COMPLETE) ─────────────────────
+  overallRiskLevel  String?   // LOW | MEDIUM | HIGH | VERY_HIGH
+  riskSummary       String?   @db.Text  // LO-readable narrative
+  recommendedAction String?   // PROCEED | ADDITIONAL_INFO | CAUTION | DECLINE
+
+  detectedLoans        Json?   // [{lender,estimatedMonthlyPayment,occurrences,lastDate,concern}]
+  suspiciousPatterns   Json?   // [{type,description,severity,evidence,estimatedMonthly}]
+  gamblingTransactions Json?   // [{platform,totalAmount,frequency,months}]
+  positiveIndicators   Json?   // [string]
+
+  // ── Computed cashflow metrics ─────────────────────────────────────────────
+  avgMonthlyInflow   Float?
+  avgMonthlyOutflow  Float?
+  avgMonthlyNet      Float?
+  fulizaUsageCount   Int?    // Fuliza (M-Pesa overdraft) borrow count – red flag
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([uploadedById])
+  @@map("mpesa_statements")
+}
+
+// ─── LO Location Tracking ────────────────────────────────────────────────────
+// Periodic GPS pings from Loan Officers in the field. Frontend auto-pings every
+// 30 minutes when the user is active. Admin/BM can view latest positions.
+
+model LocationPing {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  latitude  Float
+  longitude Float
+  accuracy  Float?   // metres reported by device
+  activity  String?  // "FIELD_HUB" | "CUSTOMER_PROFILE" | "COLLECTION" | "LOGIN"
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("location_pings")
+}
+
+// ─── Loan Groups ──────────────────────────────────────────────────────────────
+// Solidarity / joint-liability group lending model common in Kenyan agri-microfinance.
+// Each member has their own individual LoanApplication tagged to the group.
+// The group acts as social collateral — members guarantee each other.
+
+model LoanGroup {
+  id                  String               @id @default(uuid())
+  name                String
+  registrationNo      String?              // Official self-help group registration number
+  branchId            String
+  branch              Branch               @relation(fields: [branchId], references: [id])
+  loanOfficerId       String
+  loanOfficer         User                 @relation("ManagedGroups", fields: [loanOfficerId], references: [id])
+
+  status              LoanGroupStatus      @default(FORMING)
+  meetingFrequency    GroupMeetingFrequency
+  meetingDay          String?              // e.g. "MONDAY", "THURSDAY"
+  meetingLocation     String?
+  formedAt            DateTime
+  registeredAt        DateTime?
+
+  notes               String?              @db.Text
+  isActive            Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  members             LoanGroupMember[]
+  loanApplications    LoanApplication[]
+
+  @@index([branchId, status])
+  @@index([loanOfficerId])
+  @@map("loan_groups")
+}
+
+model LoanGroupMember {
+  id          String          @id @default(uuid())
+  groupId     String
+  group       LoanGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer        @relation(fields: [customerId], references: [id])
+
+  role        GroupMemberRole @default(MEMBER)
+  joinedAt    DateTime        @default(now())
+  leftAt      DateTime?
+  isActive    Boolean         @default(true)
+
+  @@unique([groupId, customerId])
+  @@index([customerId])
+  @@map("loan_group_members")
+}
+
+model LoanCollateral {
+  id                  String         @id @default(uuid())
+  loanApplicationId   String
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+
+  collateralType      CollateralType
+  description         String
+  estimatedValueKes   Float
+  documentFileName    String?        // Optional supporting document filename
+  isVerified          Boolean        @default(false)
+
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@index([loanApplicationId])
+  @@map("loan_collateral")
+}
+
+// ─── Collections ──────────────────────────────────────────────────────────────
+// Triggered automatically on day 1 of arrears; LO/collections officer logs actions.
+
+model CollectionAction {
+  id              String               @id @default(uuid())
+  loanId          String
+  loan            Loan                 @relation(fields: [loanId], references: [id])
+  performedById   String
+  performedBy     User                 @relation(fields: [performedById], references: [id])
+
+  daysInArrears   Int                  // Snapshot at time of action
+  outstandingKes  Float                // Outstanding amount at time of action
+  actionType      CollectionActionType
+  notes           String?              @db.Text
+  nextActionDate  DateTime?            // When to follow up
+  promisedAmount  Float?               // For PROMISE_TO_PAY actions
+  promisedDate    DateTime?            // When customer promised to pay
+
+  createdAt       DateTime             @default(now())
+
+  @@index([loanId, createdAt])
+  @@index([performedById])
+  @@index([nextActionDate])
+  @@map("collection_actions")
+}
+
+// ─── System Configuration ─────────────────────────────────────────────────────
+// Key-value store for admin-editable system settings.
+// Used to customise the M-Pesa AI analysis prompt and other tunable parameters.
+
+model SystemConfig {
+  id          String         @id @default(uuid())
+  key         String         @unique   // dot-namespaced, e.g. "scoring.group.approve_threshold"
+  value       String         @db.Text  // always stored as string; type-cast on read
+  dataType    ConfigDataType @default(NUMBER)
+  category    String         // grouping label shown in admin UI
+  label       String         // short human-readable name
+  description String?        // longer explanation / tooltip
+  unit        String?        // display unit: "%", "KES", "days", "months", "pts"
+  minValue    Float?         // UI validation lower bound
+  maxValue    Float?         // UI validation upper bound
+  isEditable  Boolean        @default(true)
+  updatedById String?
+  updatedBy   User?          @relation("ConfigUpdates", fields: [updatedById], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([category])
+  @@map("system_configs")
+}
+
+enum ConfigDataType {
+  NUMBER       // plain number (int or float)
+  PERCENTAGE   // stored as plain percent e.g. "18" means 18%
+  AMOUNT_KES   // Kenyan Shillings (integer)
+  DAYS         // integer count of days
+  MONTHS       // integer count of months
+  RATIO        // decimal ratio e.g. "0.40"
+  BOOLEAN      // "true" or "false"
+  SCORE_POINTS // integer score points
+}
+
+// ─── ILP Branch Eligibility ───────────────────────────────────────────────────
+// One row per (branch, segment) pair. Admin grants eligibility; system snapshots
+// performance metrics at the time of unlock for audit trail.
+// Progressive unlock: branch must reach MASTERED before a 2nd segment can be unlocked.
+
+model BranchILPEligibility {
+  id                String               @id @default(uuid())
+  branchId          String
+  branch            Branch               @relation(fields: [branchId], references: [id])
+  segment           ILPSegment
+  status            ILPEligibilityStatus @default(NOT_ELIGIBLE)
+
+  // Snapshot of branch performance metrics at time of unlock
+  par30AtUnlock     Float?   // PAR30 % when eligibility was granted
+  retentionAtUnlock Float?   // Customer retention % at unlock
+  growthAtUnlock    Float?   // Portfolio growth % at unlock
+
+  unlockedAt        DateTime?
+  unlockedById      String?
+  masteredAt        DateTime?
+  masteredById      String?
+  notes             String?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([branchId, segment])
+  @@index([branchId, status])
+  @@map("branch_ilp_eligibilities")
+}
+
+// ─── ILP Assessment ───────────────────────────────────────────────────────────
+// Linked 1:1 to a LoanApplication when loanType=INDIVIDUAL and ilpSegment is set.
+// Stores raw scorecard answers (JSON) and computed dimension scores (0-100).
+// Composite = owner×20% + business×25% + opsRisk×20% + cashFlow×25% + collateral×10%
+
+model ILPAssessment {
+  id                   String           @id @default(uuid())
+  loanApplicationId    String           @unique
+  loanApplication      LoanApplication  @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+  segment              ILPSegment
+
+  // Five weighted dimensions (each 0-100)
+  ownerScore           Int              @default(0)  // weight 20%
+  ownerData            Json             // { experienceYears, crbStatus, loanHistoryType, referenceCount }
+
+  businessScore        Int              @default(0)  // weight 25%
+  businessData         Json             // Segment-specific fields
+
+  operationalRiskScore Int              @default(0)  // weight 20%
+  operationalRiskData  Json
+
+  cashFlowScore        Int              @default(0)  // weight 25%
+  cashFlowData         Json             // { totalMonthlyIncome, existingMonthlyDebt, newInstallmentKes, months[] }
+
+  collateralScore      Int              @default(0)  // weight 10%
+  collateralData       Json             // { items[{type,valueKes,isVerified}], loanAmountKes }
+
+  // Weighted composite score and recommendation
+  compositeScore       Int              @default(0)
+  ilpRecommendation    String           @default("DECLINE")  // APPROVE | CONDITIONAL | DECLINE
+  assessorNotes        String?          @db.Text
+
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@map("ilp_assessments")
+}
+
+// ─── ILP Follow-Up Schedule ───────────────────────────────────────────────────
+// Auto-generated at loan disbursement. One row per scheduled visit/call.
+// Cycle 1 (first ILP loan) has more frequent and intensive visits.
+// Cycle 2 uses a lighter touch schedule.
+
+model ILPFollowUp {
+  id            String      @id @default(uuid())
+  loanId        String
+  loan          Loan        @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  segment       ILPSegment
+  loanCycle     Int         // 1 = first ILP loan for this customer, 2 = second
+
+  scheduledDate DateTime
+  visitType     String      // PHONE_CALL | FIELD_VISIT | DOCUMENT_REVIEW
+  milestone     String      // Human-readable label e.g. "Week 1 — Fund deployment verify"
+
+  isCompleted   Boolean     @default(false)
+  completedAt   DateTime?
+  completedById String?
+  completedBy   User?       @relation("CompletedFollowUps", fields: [completedById], references: [id])
+  visitNotes    String?     @db.Text
+  riskFlags     String[]    // Issues raised during the visit
+
+  // KPI-triggered follow-ups link back to the flag that generated them
+  riskFlagId    String?
+  riskFlag      CustomerRiskFlag? @relation(fields: [riskFlagId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime    @default(now())
+
+  @@index([loanId, scheduledDate])
+  @@index([scheduledDate, isCompleted])
+  @@map("ilp_follow_ups")
+}
+
+// ─── BCC Flags & Conditions ───────────────────────────────────────────────────
+
+model BccFlag {
+  id            String          @id @default(uuid())
+  sessionId     String
+  session       BccSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  raisedById    String
+  raisedBy      User            @relation("BccFlagsRaised", fields: [raisedById], references: [id])
+
+  category      BccFlagCategory
+  severity      RiskFlagSeverity  // Reuse YELLOW / RED
+  title         String
+  description   String?           @db.Text
+
+  isResolved    Boolean           @default(false)
+  resolvedById  String?
+  resolvedBy    User?             @relation("BccFlagsResolved", fields: [resolvedById], references: [id])
+  resolvedAt    DateTime?
+  resolvedNote  String?
+
+  // Learning loop: did this concern materialise in actual loan performance?
+  // null = still pending (loan not yet closed); true = concern validated; false = unfounded
+  didMaterialize  Boolean?
+  materializedNote String?        @db.Text
+
+  createdAt     DateTime          @default(now())
+
+  @@index([sessionId])
+  @@index([raisedById])
+  @@map("bcc_flags")
+}
+
+model BccCondition {
+  id          String     @id @default(uuid())
+  sessionId   String
+  session     BccSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  addedById   String
+  addedBy     User       @relation("BccConditionsAdded", fields: [addedById], references: [id])
+
+  description String     @db.Text
+  dueDate     DateTime?
+
+  verifiedAt    DateTime?
+  verifiedById  String?
+  verifiedBy    User?    @relation("BccConditionsVerified", fields: [verifiedById], references: [id])
+  verifiedNote  String?
+
+  createdAt   DateTime   @default(now())
+
+  @@index([sessionId])
+  @@map("bcc_conditions")
+}
+
+// ─── In-App Notifications ─────────────────────────────────────────────────────
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type        NotificationType
+  title       String
+  body        String?
+  entityType  String?          // e.g. "BccMeeting" | "BccSession"
+  entityId    String?          // UUID of the related entity
+
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// ─── ILP KPI Risk Flags ───────────────────────────────────────────────────────
+
+model CustomerRiskFlag {
+  id          String           @id @default(uuid())
+  customerId  String
+  customer    Customer         @relation(fields: [customerId], references: [id])
+  loanId      String
+  loan        Loan             @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  category    RiskFlagCategory
+  severity    RiskFlagSeverity
+  indicator   String           // machine key e.g. "dsr_elevated", "subsistence_market"
+  title       String           // "Elevated Debt Service Ratio"
+  description String           // "DSR at 44% — approaching threshold of 50%"
+
+  value       Float?           // measured value (e.g. 44.2 for DSR%)
+  threshold   Float?           // breach threshold (e.g. 40.0)
+
+  isActive     Boolean   @default(true)
+  resolvedAt   DateTime?
+  resolvedNote String?
+  resolvedById String?
+  resolvedBy   User?     @relation("ResolvedRiskFlags", fields: [resolvedById], references: [id])
+
+  followUps   ILPFollowUp[]   // KPI_CHECK follow-ups generated from this flag
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([loanId, indicator])   // one active flag per indicator per loan
+  @@index([loanId, isActive])
+  @@index([customerId, isActive])
+  @@map("customer_risk_flags")
+}
