@@ -1,15 +1,15 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { loanApi, bccApi, getErrorMessage } from '../../services/api';
-import { LoanApplication, LoanCollateral } from '../../types';
+import { loanApi, bccApi, aiApi, getErrorMessage } from '../../services/api';
+import { LoanApplication, LoanCollateral, AiApplicationReview } from '../../types';
 import StatusBadge from '../../components/common/StatusBadge';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import AwardTierBadge from '../../components/common/AwardTierBadge';
 import { useAuthStore } from '../../store/authStore';
 import {
   ArrowLeft, User, Banknote, FileText, Shield, CheckSquare, Square,
-  CheckCircle, XCircle, AlertCircle, ExternalLink, Gavel, CheckCircle2,
+  CheckCircle, XCircle, AlertCircle, ExternalLink, Gavel, CheckCircle2, Sparkles, RefreshCw,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -392,6 +392,15 @@ export default function LoanApplicationDetail() {
     enabled:  !!id,
   });
 
+  const [aiReviewEnabled, setAiReviewEnabled] = useState(false);
+  const { data: aiReview, isFetching: aiLoading, refetch: refetchAi } = useQuery<AiApplicationReview>({
+    queryKey: ['aiApplicationReview', id],
+    queryFn: () => aiApi.applicationReview(id!),
+    enabled: !!id && aiReviewEnabled,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
   if (isLoading) return <LoadingSpinner />;
   if (error || !app) {
     return (
@@ -653,6 +662,112 @@ export default function LoanApplicationDetail() {
               </Link>
             </SectionCard>
           )}
+
+          {/* AI Application Review */}
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
+                <Sparkles className="h-4 w-4 text-indigo-500" /> AI Application Review
+              </h2>
+              {aiReview && (
+                <button onClick={() => refetchAi()} disabled={aiLoading} title="Refresh"
+                  className="text-gray-400 hover:text-indigo-600 disabled:opacity-40">
+                  <RefreshCw className={`h-3.5 w-3.5 ${aiLoading ? 'animate-spin' : ''}`} />
+                </button>
+              )}
+            </div>
+
+            {!aiReviewEnabled ? (
+              <button
+                onClick={() => setAiReviewEnabled(true)}
+                className="w-full py-2 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Sparkles className="h-3.5 w-3.5" /> Generate AI Review Brief
+              </button>
+            ) : aiLoading ? (
+              <div className="flex items-center justify-center py-5 text-indigo-400 text-xs gap-2">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Analysing application…
+              </div>
+            ) : aiReview ? (
+              <div className="space-y-4">
+                {/* Headline + confidence */}
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                      aiReview.recommendation === 'APPROVE' ? 'bg-green-100 text-green-700' :
+                      aiReview.recommendation === 'CONDITIONAL' ? 'bg-yellow-100 text-yellow-700' :
+                      aiReview.recommendation === 'REJECT' ? 'bg-red-100 text-red-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>{aiReview.recommendation}</span>
+                    <span className="text-xs text-gray-400">{aiReview.confidence}% confidence</span>
+                  </div>
+                  <p className="text-sm font-medium text-gray-800">{aiReview.headline}</p>
+                </div>
+
+                {/* Strengths */}
+                {aiReview.strengths.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-green-700 mb-1">Strengths</p>
+                    <ul className="space-y-1">
+                      {aiReview.strengths.map((s, i) => (
+                        <li key={i} className="text-xs text-gray-600 flex gap-1.5">
+                          <span className="text-green-400 mt-0.5 flex-shrink-0">▲</span>{s}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Risks */}
+                {aiReview.risks.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-red-700 mb-1">Risks</p>
+                    <ul className="space-y-1">
+                      {aiReview.risks.map((r, i) => (
+                        <li key={i} className="text-xs text-gray-600 flex gap-1.5">
+                          <span className="text-red-400 mt-0.5 flex-shrink-0">▼</span>{r}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Outstanding Questions */}
+                {aiReview.outstandingQuestions.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-orange-700 mb-1">Questions to Ask Applicant</p>
+                    <ul className="space-y-1">
+                      {aiReview.outstandingQuestions.map((q, i) => (
+                        <li key={i} className="text-xs text-gray-600 flex gap-1.5">
+                          <span className="text-orange-400 mt-0.5 flex-shrink-0">?</span>{q}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Suggested Conditions */}
+                {aiReview.suggestedConditions.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-blue-700 mb-1">Suggested Conditions</p>
+                    <ul className="space-y-1">
+                      {aiReview.suggestedConditions.map((c, i) => (
+                        <li key={i} className="text-xs text-gray-600 flex gap-1.5">
+                          <span className="text-blue-400 mt-0.5 flex-shrink-0">•</span>{c}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-300 text-right">
+                  {new Date(aiReview.generatedAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-red-500 text-center py-2">AI review unavailable</p>
+            )}
+          </div>
 
           {/* 7. Review Decision */}
           {['APPROVED', 'CONDITIONALLY_APPROVED', 'REJECTED'].includes(app.status) && (

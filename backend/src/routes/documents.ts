@@ -10,6 +10,8 @@ import { encrypt, decrypt } from '../services/encryption';
 import { AppError } from '../middleware/errorHandler';
 import { writeAuditLog } from '../middleware/audit';
 import { config, ALLOWED_MIME_TYPES } from '../config';
+import { analyseDocument } from '../services/documentAnalysisService';
+import { logger } from '../utils/logger';
 
 const router = Router();
 router.use(authenticate);
@@ -68,8 +70,9 @@ router.post('/customers/:customerId', upload.single('document'), asyncHandler(as
       mimeType: req.file.mimetype,
       sizeBytes: req.file.size,
       checksum,
+      aiStatus: process.env.ANTHROPIC_API_KEY ? 'PENDING' : null,
     },
-    select: { id: true, type: true, fileName: true, uploadedAt: true },
+    select: { id: true, type: true, fileName: true, uploadedAt: true, aiStatus: true },
   });
 
   // Update KYC status to SUBMITTED if still PENDING
@@ -82,6 +85,30 @@ router.post('/customers/:customerId', upload.single('document'), asyncHandler(as
 
   await writeAuditLog(req.user.sub, 'UPLOAD_KYC_DOCUMENT', 'kyc_documents', doc.id, req);
   res.status(201).json(doc);
+
+  // Trigger async AI analysis — does not block the HTTP response
+  // Skip MPESA_STATEMENT (handled by mpesaController)
+  if (process.env.ANTHROPIC_API_KEY && docType !== 'MPESA_STATEMENT') {
+    analyseDocument(doc.id, req.params.customerId).catch((err) =>
+      logger.error('Document AI analysis failed', { documentId: doc.id, err })
+    );
+  }
+}));
+
+// GET /documents/:documentId/analysis — AI analysis status + results
+router.get('/:documentId/analysis', asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError(401, 'Authentication required');
+
+  const doc = await prisma.kYCDocument.findUnique({
+    where: { id: req.params.documentId },
+    select: {
+      id: true, type: true,
+      aiStatus: true, aiExtractedFields: true,
+      aiValidationFlags: true, aiAnalysedAt: true,
+    },
+  });
+  if (!doc) throw new AppError(404, 'Document not found');
+  res.json(doc);
 }));
 
 // Serve document (authenticated, audit-logged)

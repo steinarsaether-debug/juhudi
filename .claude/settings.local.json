@@ -78,7 +78,19 @@
       "Bash(git init)",
       "Bash(git add .)",
       "Bash(git commit:*)",
-      "Bash(gh auth status)"
+      "Bash(gh auth status)",
+      "Bash(kill 64929)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZmNmOTdjYy1hNmVkLTQxMmMtYTQzOS00NWU4MTdjZDMzMGUiLCJlbWFpbCI6ImFkbWluQGp1aHVkaWtpbGltby5jby5rZSIsInJvbGUiOiJBRE1JTiIsImJyYW5jaElkIjoiMjYzODM3OTItMGNlMi00YjQ3LWIzZDctNmNkMzY1NGYxMWFkIiwiaWF0IjoxNzczMjQ5Mzc1LCJleHAiOjE3NzMyNTI5NzV9.5gts2NVmO2rN7qMXhr-TG7pRu_V7C8AeIdeE6DOewsk\")",
+      "Bash(CUSTOMER_ID=\"235d031d-5865-40c2-b4c7-dfec469b8e7f\")",
+      "Bash(__NEW_LINE_4cb32b3f033f0ebd__ echo \"Testing AI customer summary...\")",
+      "Bash(__NEW_LINE_ba769dcae3e75e4c__ curl -s -v \"http://localhost:4000/api/ai/customer-summary/$CUSTOMER_ID\" -H \"Authorization: Bearer $TOKEN\")",
+      "Bash(netstat -tulpn)",
+      "Bash(git -C /Users/steinar/claude/juhudi branch -vv)",
+      "Bash(bash scripts/restart.sh)",
+      "Bash(echo \"exit: $?\")",
+      "Read(//opt/homebrew/Cellar/postgresql@15/15.16/bin/**)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(bash /Users/steinar/claude/juhudi/scripts/restart.sh)"
     ]
   }
 }

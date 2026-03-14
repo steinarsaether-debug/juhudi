@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { BarChart3, ChevronRight, Info, AlertTriangle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { BarChart3, ChevronRight, Info, AlertTriangle, TrendingUp, TrendingDown, Minus, Sparkles } from 'lucide-react';
 import { customerApi, scoringApi, getErrorMessage } from '../../services/api';
 import { Customer, CreditScore, ScoreBreakdown, BenchmarkComparison } from '../../types';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -442,6 +442,16 @@ export default function CreditScoring() {
                 <div className="card p-4 bg-yellow-50 border-yellow-200">
                   <h3 className="font-semibold text-sm text-yellow-800 mb-2">Scoring Notes</h3>
                   <p className="text-xs text-yellow-700 whitespace-pre-line">{result.scoringNotes}</p>
+                </div>
+              )}
+
+              {/* AI Narrative */}
+              {result.narrative && (
+                <div className="card p-4 bg-indigo-50 border-indigo-200">
+                  <h3 className="font-semibold text-sm text-indigo-800 mb-2 flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" /> AI Loan Officer Narrative
+                  </h3>
+                  <p className="text-xs text-indigo-700 leading-relaxed">{result.narrative}</p>
                 </div>
               )}
 

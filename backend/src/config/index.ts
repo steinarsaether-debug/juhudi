@@ -33,6 +33,11 @@ export const ALLOWED_MIME_TYPES = [
   'image/png',
   'image/webp',
   'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',       // .xlsx
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+  'application/msword',        // .doc (legacy)
+  'application/vnd.ms-excel',  // .xls (legacy)
 ];
 
 // Kenyan counties list (for validation)

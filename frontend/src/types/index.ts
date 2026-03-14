@@ -134,6 +134,7 @@ export interface CreditScore {
   willingnessBreakdown?: ScoreBreakdown[];
   benchmarkComparisons?: BenchmarkComparison[];
   benchmarkPenaltyApplied?: number;
+  narrative?: string;
   createdAt: string;
 }
 
@@ -790,6 +791,37 @@ export interface CustomerTierSummary {
     rateDiscount: number;  // percentage points, e.g. 0.5 = -0.5% p.a.
     feeDiscount:  number;  // percentage, e.g. 10 = -10%
   };
+}
+
+// ─── AI Analytics ─────────────────────────────────────────────────────────────
+
+export interface AiCustomerSummary {
+  riskRating: 'LOW' | 'MEDIUM' | 'HIGH' | 'VERY_HIGH';
+  summary: string;
+  strengths: string[];
+  concerns: string[];
+  recommendedAction: 'PROCEED' | 'ADDITIONAL_INFO' | 'CAUTION' | 'DECLINE';
+  keyDataPoints: { creditScore?: number; mpesaRisk?: string; activeLoans?: number };
+  generatedAt: string;
+}
+
+export interface AiApplicationReview {
+  headline: string;
+  strengths: string[];
+  risks: string[];
+  outstandingQuestions: string[];
+  suggestedConditions: string[];
+  recommendation: 'APPROVE' | 'CONDITIONAL' | 'REJECT' | 'MORE_INFO';
+  confidence: number;
+  generatedAt: string;
+}
+
+export interface AiCollectionsRecommendation {
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  recommendedAction: 'CALL' | 'VISIT' | 'RESTRUCTURE' | 'LEGAL' | 'WRITE_OFF';
+  reasoning: string;
+  suggestedMessage: string;
+  escalate: boolean;
 }
 
 // ─── KPI Risk Flags ──────────────────────────────────────────────────────────

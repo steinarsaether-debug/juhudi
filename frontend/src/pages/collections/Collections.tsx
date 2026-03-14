@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle, Phone, Car, MessageSquare, FileText,
-  ChevronDown, ChevronUp, X, Calendar,
+  ChevronDown, ChevronUp, X, Calendar, Sparkles,
 } from 'lucide-react';
-import { collectionsApi } from '../../services/api';
-import { CollectionActionType } from '../../types';
+import { collectionsApi, aiApi } from '../../services/api';
+import { CollectionActionType, AiCollectionsRecommendation } from '../../types';
 import { getErrorMessage } from '../../services/api';
 
 // ── Action type config ────────────────────────────────────────────────────────
@@ -156,6 +156,75 @@ function LogActionModal({ loanId, customerName, daysInArrears, onClose }: LogAct
   );
 }
 
+// ── AI Recommendation inline panel ────────────────────────────────────────────
+
+function AiRecommendationPanel({ loanId, onClose }: { loanId: string; onClose: () => void }) {
+  const { data, isLoading, isError } = useQuery<AiCollectionsRecommendation>({
+    queryKey: ['aiCollectionsRec', loanId],
+    queryFn: () => aiApi.collectionsRecommendation(loanId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  const priorityColor = {
+    LOW: 'bg-blue-50 border-blue-200 text-blue-800',
+    MEDIUM: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+    HIGH: 'bg-orange-50 border-orange-200 text-orange-800',
+    URGENT: 'bg-red-50 border-red-200 text-red-800',
+  };
+
+  const actionLabel: Record<string, string> = {
+    CALL: 'Phone Call', VISIT: 'Field Visit', RESTRUCTURE: 'Restructure',
+    LEGAL: 'Legal Action', WRITE_OFF: 'Write-off',
+  };
+
+  return (
+    <tr>
+      <td colSpan={7} className="px-4 py-3 bg-indigo-50 border-b border-indigo-100">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-indigo-700">
+              <Sparkles className="h-3.5 w-3.5" /> AI Collection Recommendation
+            </div>
+
+            {isLoading ? (
+              <p className="text-xs text-indigo-400">Generating recommendation…</p>
+            ) : isError ? (
+              <p className="text-xs text-red-500">Unable to generate recommendation.</p>
+            ) : data ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${priorityColor[data.priority]}`}>
+                    {data.priority} PRIORITY
+                  </span>
+                  <span className="text-xs font-semibold text-gray-700">
+                    {actionLabel[data.recommendedAction] ?? data.recommendedAction}
+                  </span>
+                  {data.escalate && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">
+                      Escalate
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-600">{data.reasoning}</p>
+                {data.suggestedMessage && (
+                  <div className="bg-white rounded border border-indigo-100 p-2">
+                    <p className="text-xs text-gray-400 mb-1 font-medium">Suggested message:</p>
+                    <p className="text-xs text-gray-700 italic">{data.suggestedMessage}</p>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 // ── Loan row ──────────────────────────────────────────────────────────────────
 
 interface LoanRow {
@@ -183,57 +252,74 @@ interface LoanRow {
 }
 
 function LoanArrearRow({ loan, onLog }: { loan: LoanRow; onLog: (id: string, name: string, days: number) => void }) {
+  const [showAi, setShowAi] = useState(false);
   const lastAction = loan.collectionActions?.[0];
   const customerName = `${loan.customer.firstName} ${loan.customer.lastName}`;
 
   return (
-    <tr className="hover:bg-gray-50">
-      <td className="px-4 py-3">
-        <Link to={`/loans/${loan.id}`} className="block group">
-          <p className="text-sm font-medium text-primary-700 group-hover:underline">{customerName}</p>
-          <p className="text-xs text-gray-400">{loan.customer.village}, {loan.customer.county}</p>
-        </Link>
-      </td>
-      <td className="px-4 py-3">
-        <DaysBadge days={loan.daysInArrears} />
-      </td>
-      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-        KES {(loan.outstandingBalKes ?? 0).toLocaleString()}
-      </td>
-      <td className="px-4 py-3 text-xs text-gray-500">
-        {loan.application?.officer
-          ? `${loan.application.officer.firstName} ${loan.application.officer.lastName}`
-          : '—'}
-      </td>
-      <td className="px-4 py-3">
-        {lastAction ? (
-          <div>
-            <span className="text-xs font-medium text-gray-700">
-              {ACTION_LABELS[lastAction.actionType as CollectionActionType]?.label ?? lastAction.actionType}
-            </span>
-            <p className="text-xs text-gray-400">{new Date(lastAction.createdAt).toLocaleDateString()}</p>
-            {lastAction.nextActionDate && (
-              <p className="text-xs text-orange-500">
-                Follow-up: {new Date(lastAction.nextActionDate).toLocaleDateString()}
-              </p>
-            )}
+    <>
+      <tr className="hover:bg-gray-50">
+        <td className="px-4 py-3">
+          <Link to={`/loans/${loan.id}`} className="block group">
+            <p className="text-sm font-medium text-primary-700 group-hover:underline">{customerName}</p>
+            <p className="text-xs text-gray-400">{loan.customer.village}, {loan.customer.county}</p>
+          </Link>
+        </td>
+        <td className="px-4 py-3">
+          <DaysBadge days={loan.daysInArrears} />
+        </td>
+        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+          KES {(loan.outstandingBalKes ?? 0).toLocaleString()}
+        </td>
+        <td className="px-4 py-3 text-xs text-gray-500">
+          {loan.application?.officer
+            ? `${loan.application.officer.firstName} ${loan.application.officer.lastName}`
+            : '—'}
+        </td>
+        <td className="px-4 py-3">
+          {lastAction ? (
+            <div>
+              <span className="text-xs font-medium text-gray-700">
+                {ACTION_LABELS[lastAction.actionType as CollectionActionType]?.label ?? lastAction.actionType}
+              </span>
+              <p className="text-xs text-gray-400">{new Date(lastAction.createdAt).toLocaleDateString()}</p>
+              {lastAction.nextActionDate && (
+                <p className="text-xs text-orange-500">
+                  Follow-up: {new Date(lastAction.nextActionDate).toLocaleDateString()}
+                </p>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-red-500 font-medium">No action yet</span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-xs text-gray-400 text-center">
+          {loan._count?.collectionActions ?? 0}
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => onLog(loan.id, customerName, loan.daysInArrears)}
+              className="btn-secondary text-xs"
+            >
+              Log
+            </button>
+            <button
+              onClick={() => setShowAi(v => !v)}
+              title="AI recommendation"
+              className={`p-1.5 rounded-lg border text-xs transition-colors ${
+                showAi
+                  ? 'bg-indigo-100 border-indigo-300 text-indigo-700'
+                  : 'bg-white border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-600'
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+            </button>
           </div>
-        ) : (
-          <span className="text-xs text-red-500 font-medium">No action yet</span>
-        )}
-      </td>
-      <td className="px-4 py-3 text-xs text-gray-400 text-center">
-        {loan._count?.collectionActions ?? 0}
-      </td>
-      <td className="px-4 py-3">
-        <button
-          onClick={() => onLog(loan.id, customerName, loan.daysInArrears)}
-          className="btn-secondary text-xs"
-        >
-          Log
-        </button>
-      </td>
-    </tr>
+        </td>
+      </tr>
+      {showAi && <AiRecommendationPanel loanId={loan.id} onClose={() => setShowAi(false)} />}
+    </>
   );
 }
 

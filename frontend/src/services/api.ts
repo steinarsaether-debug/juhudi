@@ -298,6 +298,18 @@ export const configApi = {
     api.post(`/config/reset/${encodeURIComponent(key)}`).then(r => r.data),
 };
 
+// AI Analytics
+export const aiApi = {
+  customerSummary: (customerId: string) =>
+    api.get(`/ai/customer-summary/${customerId}`).then(r => r.data),
+  applicationReview: (applicationId: string) =>
+    api.get(`/ai/application-review/${applicationId}`).then(r => r.data),
+  collectionsRecommendation: (loanId: string) =>
+    api.get(`/ai/collections-recommendation/${loanId}`).then(r => r.data),
+  getDocumentAnalysis: (documentId: string) =>
+    api.get(`/documents/${documentId}/analysis`).then(r => r.data),
+};
+
 // Weather
 export const weatherApi = {
   getBranchWeather: (branchId: string) =>

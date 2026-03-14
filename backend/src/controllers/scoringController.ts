@@ -4,6 +4,7 @@ import { prisma } from '../config/database';
 import { scoreCustomer, ScoringInput, BenchmarkComparison } from '../services/creditScoring';
 import { AppError } from '../middleware/errorHandler';
 import { writeAuditLog } from '../middleware/audit';
+import { generateScoreNarrative } from './aiController';
 
 const manualScoringSchema = z.object({
   // Geographic (optional – used for benchmark lookup)
@@ -233,7 +234,21 @@ export async function runCreditScore(req: Request, res: Response): Promise<void>
 
   await writeAuditLog(req.user.sub, 'RUN_CREDIT_SCORE', 'credit_scores', creditScore.id, req);
 
-  res.status(201).json({ ...result, creditScoreId: creditScore.id });
+  // AI narrative — non-blocking, empty string if AI is unavailable
+  const narrative = await generateScoreNarrative({
+    totalScore: result.totalScore,
+    cashflowScore: result.cashflowScore,
+    abilityScore: result.abilityScore,
+    willingnessScore: result.willingnessScore,
+    recommendation: result.recommendation,
+    scoringNotes: result.scoringNotes,
+    requestedAmountKes: input.requestedAmountKes,
+    maxLoanAmountKes: result.maxLoanAmountKes,
+    primaryCrop: input.primaryCrop,
+    county: input.county,
+  });
+
+  res.status(201).json({ ...result, creditScoreId: creditScore.id, narrative: narrative || undefined });
 }
 
 /** Get scoring history for a customer */

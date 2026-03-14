@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "QualityFlagType" ADD VALUE 'DOCUMENT_MISMATCH';

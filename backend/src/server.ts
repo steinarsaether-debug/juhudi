@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './loadEnv'; // must be first — loads .env with override so shell vars don't block
 import app from './app';
 import { config } from './config';
 import { connectDatabase, disconnectDatabase } from './config/database';

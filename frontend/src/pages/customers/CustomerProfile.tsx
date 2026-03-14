@@ -4,10 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   User, MapPin, FileText, TrendingUp, CreditCard,
   Upload, AlertCircle, CheckCircle, BarChart3, Map, ShieldAlert, ClipboardList,
-  Banknote, ChevronDown, ChevronUp, Pencil, Briefcase,
+  Banknote, ChevronDown, ChevronUp, Pencil, Briefcase, Sparkles, RefreshCw,
 } from 'lucide-react';
-import { customerApi, qualityApi, interviewApi, ilpApi, getErrorMessage } from '../../services/api';
-import { Customer, KYCDocument, DataQualityFlag, CustomerInterview, Repayment, ILPSegment, BranchILPEligibilityResponse, CustomerTierSummary } from '../../types';
+import { customerApi, qualityApi, interviewApi, ilpApi, aiApi, getErrorMessage } from '../../services/api';
+import { Customer, KYCDocument, DataQualityFlag, CustomerInterview, Repayment, ILPSegment, BranchILPEligibilityResponse, CustomerTierSummary, AiCustomerSummary } from '../../types';
 import clsx from 'clsx';
 import MpesaStatements from './MpesaStatements';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -77,6 +77,15 @@ export default function CustomerProfile() {
     queryKey: ['customerTier', id],
     queryFn:  () => customerApi.getTier(id!),
     enabled:  !!id && customer?.kycStatus !== 'PENDING',
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  const [aiSummaryEnabled, setAiSummaryEnabled] = useState(false);
+  const { data: aiSummary, isFetching: aiLoading, refetch: refetchAi } = useQuery<AiCustomerSummary>({
+    queryKey: ['aiCustomerSummary', id],
+    queryFn: () => aiApi.customerSummary(id!),
+    enabled: !!id && aiSummaryEnabled && customer?.kycStatus !== 'PENDING',
     staleTime: 5 * 60_000,
     retry: false,
   });
@@ -158,10 +167,12 @@ export default function CustomerProfile() {
               Credit Score
             </Link>
           )}
-          <Link to={`/field/${id}`} className="btn-secondary text-sm">
-            <Map className="h-4 w-4" />
-            Field Tools
-          </Link>
+          {['LOAN_OFFICER', 'SUPERVISOR'].includes(user?.role ?? '') && (
+            <Link to={`/field/${id}`} className="btn-secondary text-sm">
+              <Map className="h-4 w-4" />
+              Field Tools
+            </Link>
+          )}
           {customer.kycStatus === 'VERIFIED' && customer.amlStatus !== 'BLOCKED' && (
             <Link
               to={`/customers/${id}/loan`}
@@ -544,6 +555,95 @@ export default function CustomerProfile() {
               <Link to={`/customers/${id}/score`} className="btn-secondary w-full mt-3 text-xs">
                 <BarChart3 className="h-3.5 w-3.5" /> Re-score
               </Link>
+            </div>
+          )}
+
+          {/* AI Risk Summary */}
+          {customer.kycStatus !== 'PENDING' && (
+            <div className="card p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="section-title flex items-center gap-2 mb-0">
+                  <Sparkles className="h-4 w-4 text-indigo-400" /> AI Risk Summary
+                </h2>
+                {aiSummary ? (
+                  <button
+                    onClick={() => refetchAi()}
+                    disabled={aiLoading}
+                    title="Refresh AI summary"
+                    className="text-gray-400 hover:text-indigo-600 disabled:opacity-40"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${aiLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                ) : null}
+              </div>
+
+              {!aiSummaryEnabled ? (
+                <button
+                  onClick={() => setAiSummaryEnabled(true)}
+                  className="w-full py-2 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> Generate AI Summary
+                </button>
+              ) : aiLoading ? (
+                <div className="flex items-center justify-center py-4 text-indigo-400 text-xs gap-2">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Analysing customer data…
+                </div>
+              ) : aiSummary ? (
+                <div className="space-y-3">
+                  {/* Risk rating + action */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                      aiSummary.riskRating === 'LOW' ? 'bg-green-100 text-green-700' :
+                      aiSummary.riskRating === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' :
+                      aiSummary.riskRating === 'HIGH' ? 'bg-orange-100 text-orange-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {aiSummary.riskRating} RISK
+                    </span>
+                    <span className={`text-xs px-2.5 py-1 rounded-full ${
+                      aiSummary.recommendedAction === 'PROCEED' ? 'bg-green-50 text-green-600' :
+                      aiSummary.recommendedAction === 'CAUTION' ? 'bg-orange-50 text-orange-600' :
+                      aiSummary.recommendedAction === 'DECLINE' ? 'bg-red-50 text-red-600' :
+                      'bg-blue-50 text-blue-600'
+                    }`}>
+                      {aiSummary.recommendedAction.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+
+                  {/* Summary */}
+                  <p className="text-xs text-gray-600 leading-relaxed">{aiSummary.summary}</p>
+
+                  {/* Strengths */}
+                  {aiSummary.strengths.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-green-700 mb-1">Strengths</p>
+                      <ul className="space-y-0.5">
+                        {aiSummary.strengths.map((s, i) => (
+                          <li key={i} className="text-xs text-gray-600 flex gap-1.5"><span className="text-green-400 mt-0.5">▲</span>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Concerns */}
+                  {aiSummary.concerns.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-red-700 mb-1">Concerns</p>
+                      <ul className="space-y-0.5">
+                        {aiSummary.concerns.map((c, i) => (
+                          <li key={i} className="text-xs text-gray-600 flex gap-1.5"><span className="text-red-400 mt-0.5">▼</span>{c}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-300 text-right">
+                    {new Date(aiSummary.generatedAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-red-500 text-center py-2">AI summary unavailable</p>
+              )}
             </div>
           )}
 
