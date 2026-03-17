@@ -1,0 +1,71 @@
+# Validate Claude Code Configuration
+#
+# Ensures .claude/ directory structure stays valid:
+# - Commands have proper frontmatter
+# - Rules are well-formed markdown
+# - No TODOs left in production rules
+
+name: Validate Claude Config
+
+on:
+  push:
+    paths:
+      - '.claude/**'
+  pull_request:
+    paths:
+      - '.claude/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate command frontmatter
+        run: |
+          errors=0
+          for cmd in .claude/commands/*.md; do
+            [ -f "$cmd" ] || continue
+            if ! head -1 "$cmd" | grep -q "^---"; then
+              echo "ERROR: Missing frontmatter in $cmd"
+              errors=$((errors + 1))
+            fi
+            if ! grep -q "^description:" "$cmd"; then
+              echo "ERROR: Missing description in $cmd"
+              errors=$((errors + 1))
+            fi
+          done
+          if [ $errors -gt 0 ]; then
+            echo "Found $errors validation errors"
+            exit 1
+          fi
+          echo "All commands valid"
+
+      - name: Check for TODOs in rules
+        run: |
+          if grep -rn "TODO\|FIXME\|HACK\|XXX" .claude/rules/ .claude/commands/ 2>/dev/null; then
+            echo ""
+            echo "WARNING: Found TODOs/FIXMEs in Claude config files."
+            echo "These should be resolved before shipping."
+            # exit 1  # Uncomment to make this a hard failure
+          fi
+
+      - name: Validate hooks.json syntax
+        run: |
+          if [ -f ".claude/hooks.json" ]; then
+            python3 -m json.tool .claude/hooks.json > /dev/null 2>&1 || {
+              echo "ERROR: .claude/hooks.json is not valid JSON"
+              exit 1
+            }
+            echo "hooks.json is valid JSON"
+          fi
+
+      - name: Check rules are valid markdown
+        run: |
+          for rule in $(find .claude/rules/ -name "*.md" 2>/dev/null); do
+            if [ ! -s "$rule" ]; then
+              echo "WARNING: Empty rule file: $rule"
+            fi
+          done
+          echo "Rules check complete"

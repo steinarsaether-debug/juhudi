@@ -1,0 +1,51 @@
+# Automated PR Review with Claude Code
+#
+# This workflow runs Claude Code to review PRs automatically.
+# Based on Anthropic's Product Design team pattern:
+# automated PR comments via GitHub Actions.
+#
+# Setup:
+# 1. Add ANTHROPIC_API_KEY to repository secrets
+# 2. Customize the review scope below
+
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Skip drafts and dependabot
+    if: github.event.pull_request.draft == false && github.actor != 'dependabot[bot]'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Optional: customize what Claude reviews
+          # model: claude-sonnet-4-20250514
+          # max_tokens: 4096
+          prompt: |
+            Review this PR against the project's rules in .claude/rules/:
+            - Check code style (.claude/rules/code-style.md)
+            - Check security (.claude/rules/security.md)
+            - Check testing (.claude/rules/testing.md)
+            - Check git workflow (.claude/rules/git-workflow.md)
+
+            Focus on:
+            1. Critical issues (bugs, security, type safety)
+            2. Test coverage for changed behavior
+            3. Adherence to project conventions
+
+            Be concise. Flag only actionable items.

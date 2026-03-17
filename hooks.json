@@ -1,0 +1,50 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/hooks/scan-secrets.sh \"$CLAUDE_FILE_PATH\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Evaluate if this bash command is safe. Check for: destructive operations (rm -rf, DROP TABLE), missing safeguards, operations on production resources, and commands that can't be undone. Block if dangerous.",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/hooks/log-action.sh \"write\" \"$CLAUDE_FILE_PATH\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/hooks/quality-check.sh",
+            "timeout": 45
+          }
+        ]
+      }
+    ]
+  }
+}
